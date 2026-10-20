@@ -121,4 +121,4 @@ export function moverLine(quotes: Quote[]): string {
 }
 
 export const AIDE_HELP =
-  "Mình trả lời khi bạn hỏi và tự ghi báo cáo đầu phiên, cuối phiên, biến động trong phiên. Mua mới phải qua cổng nợ, thị trường, ngành, thiết lập A/B/C và R:R sau phí. Nợ trên 10% vốn ròng thì không mua. Hỏi đánh giá kèm mã để xem thẻ. Không gửi lệnh lên sàn.";
+  "Mình trả lời khi bạn hỏi và tự ghi báo cáo đầu phiên, cuối phiên, biến động trong phiên. Mua mới phải qua cổng nợ, thị trường, ngành, thiết lập A/B/C hoặc đáy 2, và R:R sau phí. Thị trường còn giảm thì bỏ đáy 1. Nợ trên 10% vốn ròng thì không mua. Hỏi đánh giá kèm mã để xem thẻ. Không gửi lệnh lên sàn.";

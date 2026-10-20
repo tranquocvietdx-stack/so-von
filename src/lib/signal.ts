@@ -2,7 +2,7 @@ import { fmtPct, fmtPrice } from "./format.ts";
 import { rsi, rsiSeries, sma, smaSeries, type Bar } from "./tech.ts";
 
 export const SKILL_NOTE =
-  "Mọi khuyến nghị mua phải qua đúng thứ tự: nợ margin, thị trường, ngành, thiết lập, rồi R:R sau phí. Nợ trên 10% vốn ròng thì không mua mới. Thị trường 0–5 điểm từ VN-Index: trên MA50, trên MA200, độ dốc MA20, thanh khoản, độ rộng. Điểm 0–1 không mua, 2–3 mua nửa, 4–5 mua đủ. Ngành chấm cùng cách trên rổ mẫu vì API không có VNFIN hay VNREAL. Mã chỉ nhận 3 thiết lập: A phá vỡ nền, B hồi về hỗ trợ trong xu hướng tăng, C đảo chiều đã xác nhận. Bắt đáy khi RSI thấp bị loại. Cắt lỗ tối đa 8%, R:R sau phí tối thiểu 2. Bán: cắt lỗ cứng, hòa vốn ở +1R, chốt một phần ở 2R và 3R, gãy hỗ trợ hoặc phân phối, ngành hoặc thị trường yếu, quá 15 phiên chưa đạt +1R. Không gửi lệnh lên sàn.";
+  "Mọi khuyến nghị mua phải qua đúng thứ tự: nợ margin, thị trường, ngành, thiết lập, rồi R:R sau phí. Nợ trên 10% vốn ròng thì không mua mới. Thị trường 0–5 điểm từ VN-Index: trên MA50, trên MA200, độ dốc MA20, thanh khoản, độ rộng. Điểm 0–1 không mua, 2–3 mua nửa, 4–5 mua đủ. Ngành chấm cùng cách trên rổ mẫu vì API không có VNFIN hay VNREAL. Mã nhận A phá vỡ nền, B hồi về hỗ trợ trong xu hướng tăng, C đảo chiều đã xác nhận, và D bắt đáy. D chỉ khi RSI từ 30 trở xuống và thanh khoản phiên đó cao hơn trung bình 10 phiên ít nhất 20%. Nếu VN-Index còn dưới MA50 hoặc MA20 đang dốc xuống thì bỏ đáy 1, chờ đáy 2: RSI lại quá bán, giá không thủng đáy 1 quá 3%, và thanh khoản tăng. Cắt lỗ tối đa 8%, R:R sau phí tối thiểu 2. Bán: cắt lỗ cứng, hòa vốn ở +1R, chốt một phần ở 2R và 3R, gãy hỗ trợ hoặc phân phối, ngành hoặc thị trường yếu, quá 15 phiên chưa đạt +1R. Không gửi lệnh lên sàn.";
 
 const BUY_FEE = 0.0015;
 const SELL_COST = 0.0025;
@@ -15,10 +15,12 @@ export type LayerScore = {
   score: number;
   gate: Gate;
   factor: number;
+  /** True when the index is still under MA50 or MA20 is falling. */
+  falling?: boolean;
   lines: string[];
 };
 
-export type SetupId = "A" | "B" | "C";
+export type SetupId = "A" | "B" | "C" | "D";
 
 export type Setup = {
   id: SetupId;
@@ -111,7 +113,10 @@ export function signal(input: {
   margin: number;
 }): SignalCard {
   const price = input.bars.at(-1)?.c ?? null;
-  const setup = findSetup(input.bars);
+  const falling = marketStillFalling(input.market);
+  const bottom = readBottom(input.bars);
+  const trend = breakout(input.bars) ?? pullback(input.bars) ?? reversal(input.bars);
+  const setup = trend ?? (bottom.phase === "second" || (bottom.phase === "first" && !falling) ? bottom.setup : null);
   const blocked = debtBlocks(input.margin, input.nav);
   const ratio = debtRatio(input.margin, input.nav);
   const fails: string[] = [];
@@ -122,15 +127,22 @@ export function signal(input: {
         : `Cổng nợ: nợ/vốn ròng ${fmtPct(ratio * 100).replace("+", "")}, trên 10%. Không mua mới.`,
     );
   }
-  if (input.market.factor === 0) fails.push(`Cổng thị trường: ${input.market.score}/5, không mua mới.`);
+  if (input.market.factor === 0 && setup?.id !== "D") fails.push(`Cổng thị trường: ${input.market.score}/5, không mua mới.`);
   if (input.sector.factor === 0) fails.push(`Cổng ngành: ${input.sector.lines[0] ?? "chưa chấm được"}.`);
-  if (!setup) fails.push("Không khớp thiết lập A, B hoặc C. Bắt đáy khi mới có RSI thấp bị loại.");
+  if (!setup && bottom.phase === "first" && falling) {
+    fails.push("Đáy 1, RSI quá bán. Thị trường còn khả năng giảm, bỏ đáy này và chờ đáy 2 khi RSI lại từ 30 trở xuống, giá không thủng đáy 1 quá 3%, và thanh khoản tăng.");
+  } else if (!setup && bottom.phase === "second" && !bottom.volumeUp) {
+    fails.push("Có hình đáy 2 nhưng thanh khoản chưa tăng so với 10 phiên trước, chưa mua.");
+  } else if (!setup && bottom.phase === "first" && !bottom.volumeUp) {
+    fails.push("RSI quá bán nhưng thanh khoản chưa tăng, chưa bắt đáy.");
+  } else if (!setup) fails.push("Không khớp thiết lập A, B, C hoặc đáy 2. RSI thấp mà thanh khoản không tăng thì bỏ.");
   const levels = setup ? levelsOf(setup.entry, setup.stop) : null;
   if (setup && levels && (levels.rr == null || levels.rr < 2)) {
     fails.push(`Cổng R:R sau phí tới 2R là ${levels.rr == null ? "không tính được" : trim(levels.rr)}, dưới 2.`);
   }
-  const shares = setup && levels && levels.rr != null && levels.rr >= 2 && !blocked && input.market.factor > 0 && input.sector.factor > 0
-    ? sizeShares(input.nav, setup.entry, input.market, input.sector)
+  const sizedMarket = setup?.id === "D" && input.market.factor === 0 ? { ...input.market, factor: 0.5, gate: "nửa" as const } : input.market;
+  const shares = setup && levels && levels.rr != null && levels.rr >= 2 && !blocked && sizedMarket.factor > 0 && input.sector.factor > 0
+    ? sizeShares(input.nav, setup.entry, sizedMarket, input.sector)
     : 0;
   if (setup && levels && levels.rr != null && levels.rr >= 2 && shares < 100 && fails.length === 0) {
     fails.push("Khối lượng dưới một lô 100 cổ phiếu.");
@@ -211,8 +223,16 @@ export function exitPlan(input: {
   return { ticker, action: "giữ", reason: "Chưa chạm cắt lỗ, chưa đủ 1R và chưa có tín hiệu hủy kèo." };
 }
 
-export function findSetup(bars: Bar[]): Setup | null {
-  return breakout(bars) ?? pullback(bars) ?? reversal(bars);
+export function findSetup(bars: Bar[], marketFalling = false): Setup | null {
+  const bottom = readBottom(bars);
+  const fromBottom = bottom.phase === "second" || (bottom.phase === "first" && !marketFalling) ? bottom.setup : null;
+  return breakout(bars) ?? pullback(bars) ?? reversal(bars) ?? fromBottom;
+}
+
+export function marketStillFalling(market: LayerScore): boolean {
+  if (market.falling != null) return market.falling;
+  const text = market.lines.join(" ");
+  return text.includes("dưới MA50") || text.includes("MA20 không dốc lên") || market.factor === 0;
 }
 
 function scoreLayer(bars: Bar[], breadth: number | null): LayerScore {
@@ -248,9 +268,10 @@ function scoreLayer(bars: Bar[], breadth: number | null): LayerScore {
     if (breadth >= 0.6) score += 1;
     lines.push(`độ rộng nháp từ 10 mã lớn ${fmtPct(breadth * 100).replace("+", "")}`);
   }
+  const falling = (ma50 != null && price < ma50) || (previous != null && ma20 != null && ma20 < previous);
   const gate: Gate = score <= 1 ? "chặn" : score <= 3 ? "nửa" : "đủ";
   const factor = gate === "chặn" ? 0 : gate === "nửa" ? 0.5 : 1;
-  return { score, gate, factor, lines: [`VN-Index: ${lines.join(", ")}`] };
+  return { score, gate, factor, falling, lines: [`VN-Index: ${lines.join(", ")}`] };
 }
 
 function ret(bars: Bar[], sessions: number): number | null {
@@ -325,6 +346,65 @@ function reversal(bars: Bar[]): Setup | null {
   const stop = stopFor(price, trough);
   if (stop == null) return null;
   return { id: "C", entry: roundTick(price), stop, invalid: `Hủy nếu đóng cửa dưới đáy đảo chiều ${fmtPrice(roundTick(trough))}.` };
+}
+
+function readBottom(bars: Bar[]): { phase: "none" | "first" | "second"; volumeUp: boolean; setup: Setup | null } {
+  const troughs = oversoldTroughs(bars);
+  if (!troughs.length) return { phase: "none", volumeUp: false, setup: null };
+  const latest = troughs[troughs.length - 1]!;
+  if (bars.length - 1 - latest.index > 2) return { phase: "none", volumeUp: false, setup: null };
+  const volumeUp = volumeRising(bars, latest.index) || volumeRising(bars, bars.length - 1);
+  const earlier = troughs.filter((item) => latest.index - item.index >= 5);
+  const prior = earlier[earlier.length - 1];
+  const price = bars[bars.length - 1]!.c;
+  if (prior && latest.low >= prior.low * 0.97 && latest.low <= prior.low * 1.08) {
+    const stop = volumeUp ? stopFor(price, Math.min(prior.low, latest.low)) : null;
+    return {
+      phase: "second",
+      volumeUp,
+      setup: stop
+        ? { id: "D", entry: roundTick(price), stop, invalid: `Đáy 2 sau đáy 1 ${fmtPrice(roundTick(prior.low))}. Hủy nếu đóng cửa thủng đáy 1 quá 3%.` }
+        : null,
+    };
+  }
+  const stop = volumeUp ? stopFor(price, latest.low) : null;
+  return {
+    phase: "first",
+    volumeUp,
+    setup: stop
+      ? { id: "D", entry: roundTick(price), stop, invalid: "Đáy 1, chỉ xét vì thị trường không còn đà giảm. Hủy nếu đóng cửa dưới đáy này." }
+      : null,
+  };
+}
+
+function oversoldTroughs(bars: Bar[]): { index: number; low: number }[] {
+  const series = rsiSeries(bars.map((bar) => bar.c));
+  const raw: { index: number; low: number }[] = [];
+  for (let index = 2; index < bars.length; index++) {
+    const value = series[index];
+    if (value == null || value > 30) continue;
+    const low = bars[index]!.l;
+    const before = low <= bars[index - 1]!.l && low <= bars[index - 2]!.l;
+    const after = index >= bars.length - 2 || (low <= bars[index + 1]!.l && (index + 2 >= bars.length || low <= bars[index + 2]!.l));
+    if (before && after) raw.push({ index, low });
+  }
+  const merged: { index: number; low: number }[] = [];
+  for (const item of raw) {
+    const prev = merged[merged.length - 1];
+    if (prev && item.index - prev.index < 5) {
+      if (item.low < prev.low) merged[merged.length - 1] = item;
+      continue;
+    }
+    merged.push(item);
+  }
+  return merged;
+}
+
+function volumeRising(bars: Bar[], index: number): boolean {
+  const prior = bars.slice(Math.max(0, index - 10), index).map((bar) => bar.v).filter((volume) => volume > 0);
+  if (prior.length < 5) return false;
+  const avg = prior.reduce((sum, volume) => sum + volume, 0) / prior.length;
+  return bars[index]!.v >= avg * 1.2;
 }
 
 function stopFor(entry: number, structure: number): number | null {

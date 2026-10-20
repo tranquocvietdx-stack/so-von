@@ -45,6 +45,34 @@ test("điểm bán cắt lỗ khi đang vay và thủng hơn 2%", () => {
   assert.match(card.reason, /2%/);
 });
 
+test("bỏ đáy 1 khi thị trường còn giảm, nhận đáy 2 khi RSI quá bán và thanh khoản tăng", () => {
+  const first = wave(25000, 21000, 8);
+  const bounce = wave(21000, 22500, 6).slice(1);
+  const second = wave(22500, 21100, 6).slice(1);
+  const flat = Array.from({ length: 24 }, () => 25000);
+  const closes = [...flat, ...first, ...bounce, ...second];
+  const series = bars(closes, 1000);
+  const mark = (index: number) => {
+    const bar = series[index]!;
+    series[index] = { ...bar, l: bar.c * 0.96, v: index === series.length - 1 ? 4000 : bar.v };
+  };
+  mark(flat.length + first.length - 1);
+  mark(series.length - 1);
+  const falling: LayerScore = { score: 1, gate: "chặn", factor: 0, falling: true, lines: ["dưới MA50"] };
+  const onlyFirst = series.slice(0, flat.length + first.length);
+  onlyFirst[onlyFirst.length - 1] = { ...onlyFirst[onlyFirst.length - 1]!, v: 4000 };
+  const skipped = signal({ ticker: "HPG", bars: onlyFirst, market: falling, sector: open, nav: 400_000_000, margin: 0 });
+  assert.match(skipped.thesis, /Đáy 1/);
+  assert.equal(skipped.stance, "bỏ");
+  const setup = findSetup(series, true);
+  assert.equal(setup?.id, "D");
+  assert.match(setup?.invalid ?? "", /Đáy 2/);
+});
+
+function wave(from: number, to: number, steps: number): number[] {
+  return Array.from({ length: steps }, (_, index) => from + ((to - from) * (index + 1)) / steps);
+}
+
 test("thị trường dưới MA50 bị chặn mua", () => {
   const closes = Array.from({ length: 220 }, (_, i) => 1800 - i);
   const score = scoreMarket(bars(closes, 1_000_000), 0.2);

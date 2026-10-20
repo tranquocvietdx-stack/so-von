@@ -111,7 +111,8 @@ export const useReportLog = create<ReportState>()(
         const legacyNote =
           savedSkill?.note?.startsWith("Báo chỉ số") ||
           savedSkill?.note?.startsWith("Đầu phiên và cuối phiên") ||
-          savedSkill?.note?.startsWith("Skill điểm mua bán.");
+          savedSkill?.note?.startsWith("Skill điểm mua bán.") ||
+          savedSkill?.note?.startsWith("Mọi khuyến nghị");
         const legacyScenarios =
           saved?.scenarios?.length === 3 && saved.scenarios.every((item) => item.id === "cut" || item.id === "take" || item.id === "dip") && saved.scenarios.some((item) => item.when === "dayDown");
         return {

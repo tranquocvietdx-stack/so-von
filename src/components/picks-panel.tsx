@@ -50,7 +50,7 @@ export function PicksPanel({ enabled, quotes }: { enabled: boolean; quotes: Map<
       <section className="rounded-3xl border border-line bg-surface p-4">
         <h2 className="text-sm font-medium">Danh mục khuyến nghị</h2>
         <p className="mt-2 text-sm text-muted">
-          Mã chỉ vào danh mục khi qua đủ cổng: nợ dưới 10% vốn ròng, thị trường, ngành, một trong ba thiết lập A/B/C, và R:R sau phí từ 2. Bản đạt chuẩn được ghi vào Báo cáo và bắn Telegram nếu đã nối bot. Nhật ký cần ít nhất 10 tín hiệu trong 1–2 năm, khoảng 60% có lãi sau 10 phiên, rồi mới chỉnh ngưỡng.
+          Mã chỉ vào danh mục khi qua đủ cổng: nợ dưới 10% vốn ròng, thị trường, ngành, thiết lập A, B, C hoặc đáy 2, và R:R sau phí từ 2. Đáy 1 bị bỏ nếu thị trường còn giảm. Bản đạt chuẩn được ghi vào Báo cáo và bắn Telegram nếu đã nối bot.
         </p>
         <form
           className="mt-3 flex gap-2"
