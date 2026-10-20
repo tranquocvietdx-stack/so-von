@@ -1,0 +1,109 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #f3f0e8;
+  --color-surface: #faf8f4;
+  --color-surface-2: #efeae1;
+  --color-fg: #1c1915;
+  --color-muted: #5f594f;
+  --color-subtle: #7d766c;
+  --color-line: #e4ddd2;
+  --color-accent: #24362e;
+  --color-accent-fg: #f6f3ec;
+  --color-up: #1b6b45;
+  --color-down: #9c3b34;
+  --color-flat: #6d675e;
+  --font-sans: "Be Vietnam Pro", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Newsreader", "Times New Roman", serif;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background: var(--color-bg);
+    color: var(--color-fg);
+    color-scheme: light;
+  }
+  body {
+    font-family: var(--font-sans);
+    background: var(--color-bg);
+    color: var(--color-fg);
+    min-height: 100dvh;
+    line-height: 1.5;
+    text-wrap: pretty;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--color-accent) 18%, white);
+  }
+}
+
+@layer utilities {
+  .press {
+    transition: transform 150ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .press:active {
+    transform: scale(0.98);
+  }
+  .scroll-x {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .scroll-x::-webkit-scrollbar {
+    display: none;
+  }
+  .pill {
+    transition: transform 250ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .skeleton {
+    background: var(--color-surface-2);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .skeleton {
+    animation: skeleton 1.4s linear infinite;
+  }
+}
+
+@keyframes skeleton {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .press:active {
+    transform: none;
+  }
+  .fade-in {
+    animation: none;
+  }
+  .pill {
+    transition: none;
+  }
+}
